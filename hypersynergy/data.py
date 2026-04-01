@@ -56,7 +56,7 @@ class DoTatLoiBenchmark:
         mapped_formulas = edges_df[formula_col].map(formula_map).values
         mapped_herbs = edges_df[herb_col].map(herb_map).values
 
-        # 3. Feature Alignment (Exact Colab Logic)
+        # 3. Feature Alignment (Enhanced for Robustness)
         feature_dim = 22
         vtm_features = np.zeros((num_herbs, feature_dim))
         tcm_features = np.zeros((num_herbs, feature_dim))
@@ -71,15 +71,28 @@ class DoTatLoiBenchmark:
                     vtm_count += 1
                 except: pass
         
-        # Align TCM Global Features (Row-based alignment from Colab)
+        # Align TCM Global Features (ID-based matching for accuracy)
         tcm_count = 0
-        for idx, row in tcm_df.iterrows():
-            if idx < num_herbs:
-                try: 
-                    tcm_features[idx] = row.iloc[2:24].values.astype(float)
-                    tcm_count += 1
-                except: 
-                    tcm_features[idx] = np.random.randn(22)
+        # If 'ID' column exists, use it. Otherwise, fallback to row index as per colab.
+        if 'ID' in tcm_df.columns:
+            tcm_lookup = dict(zip(tcm_df['ID'], tcm_df.index))
+            for h_id, idx in herb_map.items():
+                if h_id in tcm_lookup:
+                    row_idx = tcm_lookup[h_id]
+                    try:
+                        tcm_features[idx] = tcm_df.iloc[row_idx, 2:24].values.astype(float)
+                        tcm_count += 1
+                    except:
+                        tcm_features[idx] = np.random.randn(22)
+        else:
+            # Revert to raw Colab index logic
+            for idx, row in tcm_df.iterrows():
+                if idx < num_herbs:
+                    try: 
+                        tcm_features[idx] = row.iloc[2:24].values.astype(float)
+                        tcm_count += 1
+                    except: 
+                        tcm_features[idx] = np.random.randn(22)
         
         print(f"    [Success] Mapped {vtm_count} VTM and {tcm_count} TCM feature vectors.")
 
@@ -98,8 +111,6 @@ class DoTatLoiBenchmark:
         negative_samples = []
         num_neg = num_pos * k_negative
         
-        # Using the Colab's specific while loop for negative sampling
-        # This ensures exactly num_neg unique samples are generated
         while len(negative_samples) < num_neg:
             f_rand, h_rand = np.random.randint(0, num_formulas), np.random.randint(0, num_herbs)
             if (f_rand, h_rand) not in positive_set:
