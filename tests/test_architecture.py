@@ -44,7 +44,7 @@ class TestHyperSynergyArchitecture(unittest.TestCase):
             )
             self.assertIsInstance(model, MATG_Model)
             
-    def test_model_forward_pass(self):
+    def test_model_forward_pass_correct_order(self):
         """Test if a forward pass produces expected output shapes."""
         model = MATG_Model(
             num_nodes=self.num_nodes,
