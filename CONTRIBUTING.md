@@ -21,9 +21,9 @@ HyperSynergy/
 │  
 ├── data/ # Your raw CSV files go here  
 │ ├── CongThuc_updated.csv  
-│ └── ViThuoc_final.csv 
-│ └── DoTatLoi_714_Enriched.csv 
-│ └── Harmonized_Global_Herbal_Dataset.csv 
+│ └── ViThuoc_final.csv  
+│ └── DoTatLoi_714_Enriched.csv  
+│ └── Harmonized_Global_Herbal_Dataset.csv  
 │  
 ├── tests/ # For testing the library architecture  
 │ └── test_architecture.py  
