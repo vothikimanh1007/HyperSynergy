@@ -6,28 +6,29 @@ class GraphFocalLoss(nn.Module):
     """
     Graph Focal Loss (Colab v82 Version).
     
-    This version uses the internal pos_weight of BCE to precisely match the
-    synergy detection gradients reported in the paper.
+    Revised to align with the ModelEvaluator signature: alpha=1.5, gamma=4.0.
+    This ensures that the weighting (alpha) and the focusing factor (gamma)
+    are correctly applied to resolve the 1:5 class imbalance.
     """
-    def __init__(self, gamma=4.0, pos_weight=1.5):
+    def __init__(self, alpha=1.5, gamma=4.0):
         super(GraphFocalLoss, self).__init__()
+        self.alpha = alpha
         self.gamma = gamma
-        self.pos_weight = pos_weight
 
     def forward(self, logits, targets):
         # Ensure targets are on the correct device and shape
         p = torch.sigmoid(logits)
         
-        # Use the exact Colab implementation of weighted BCE
-        pos_weight_tensor = torch.tensor([self.pos_weight], device=logits.device)
+        # Use alpha as the positive weight for the imbalanced minority class
+        alpha_tensor = torch.tensor([self.alpha], device=logits.device)
         ce_loss = F.binary_cross_entropy_with_logits(
-            logits, targets, reduction='none', pos_weight=pos_weight_tensor
+            logits, targets, reduction='none', pos_weight=alpha_tensor
         )
         
-        # Calculate the probability of the true class
+        # Calculate the probability of the true class (p_t)
         p_t = p * targets + (1 - p) * (1 - targets)
         
-        # Apply the focusing factor
+        # Apply the focusing factor (1 - p_t)^gamma
         focal_loss = ce_loss * ((1 - p_t) ** self.gamma)
         
         return focal_loss.mean()
