@@ -1,18 +1,44 @@
 import torch
 import numpy as np
+import random
+import os
 from hypersynergy.data import DoTatLoiBenchmark
 from hypersynergy.models import MATG_Model
 from hypersynergy.evaluation import ModelEvaluator
 from hypersynergy.explainers import NeuMapperExplainer
 
+def set_seed(seed=42):
+    """
+    Sets the seed for all relevant libraries to ensure reproducibility across 
+    CPU and GPU environments.
+    """
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+    
+    # Force deterministic behavior in CuDNN to prevent floating-point variance
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+    
+    # Set a fixed value for the Python hash seed
+    os.environ['PYTHONHASHSEED'] = str(seed)
+    
+    print(f"[Reproducibility] Global seed set to: {seed}")
+
 def run_hypersynergy_pipeline():
     """
     Main execution script for the HyperSynergy Framework.
-    1. Loads the DoTatLoi-714 Benchmark.
-    2. Trains the Proposed MATG Model using 5-Fold Cross-Validation.
-    3. Runs an Ablation Baseline (GCN) for comparison.
-    4. Generates NeuMapper TDA Visualizations.
+    1. Sets global seed for perfect reproducibility.
+    2. Loads the DoTatLoi-714 Benchmark.
+    3. Trains the Proposed MATG Model using 5-Fold Cross-Validation.
+    4. Runs an Ablation Baseline (GCN) for comparison.
+    5. Generates NeuMapper TDA Visualizations.
     """
+    
+    # Step 0: Set seed before any data loading or model initialization
+    set_seed(42)
     
     # --- Step 1: Data Preparation ---
     (dataset, vtm_feats, tcm_feats, form_feats, 
@@ -23,7 +49,6 @@ def run_hypersynergy_pipeline():
     evaluator = ModelEvaluator()
 
     # --- Step 3: Train Proposed MATG Model ---
-    # We use a model factory to ensure a fresh model is initialized for each fold
     def matg_factory():
         return MATG_Model(
             num_nodes=num_herbs,
