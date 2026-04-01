@@ -1,6 +1,5 @@
 import torch
 import torch.optim as optim
-from torch.utils.data import DataLoader, TensorDataset
 from sklearn.model_selection import StratifiedKFold
 from sklearn.metrics import accuracy_score, f1_score, roc_auc_score
 import numpy as np
@@ -11,17 +10,24 @@ class ModelEvaluator:
     """
     ModelEvaluator: Manages the training and cross-validation lifecycle.
     
-    Updated to include CosineAnnealingLR and AdamW weight decay as specified 
-    in the v82_Final Colab notes for optimal 400-epoch convergence.
+    Revised to use Full-Batch Training as per the v82_Final Colab logic.
+    Full-batch optimization is critical for the stability of Riemannian 
+    manifolds on small-scale hypergraph benchmarks like DoTatLoi-714.
     """
     def __init__(self, device=None):
         self.device = device if device else torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         print(f"[ModelEvaluator] Initialized on device: {self.device}")
 
-    def execute_model_training(self, model_factory, name, dataset, epochs=400, batch_size=256):
+    def execute_model_training(self, model_factory, name, dataset, epochs=400, batch_size=None):
         """
-        Executes a 5-Fold Cross-Validation training run with scheduling.
-        dataset columns: [0: formula_idx, 1: herb_idx, 2: label]
+        Executes a 5-Fold Cross-Validation training run using Full-Batch optimization.
+        
+        Args:
+            model_factory: Lambda returning a fresh model instance.
+            name: Name of the model (for logging).
+            dataset: Array [formula_idx, herb_idx, label].
+            epochs: Training duration.
+            batch_size: Ignored in favor of Full-Batch logic for v82 reproducibility.
         """
         X = dataset[:, :2] 
         y = dataset[:, 2]
@@ -33,67 +39,51 @@ class ModelEvaluator:
         start_time = time.time()
 
         for fold, (train_idx, val_idx) in enumerate(skf.split(X, y)):
-            print(f"  > Fold {fold+1}/5 training...")
+            print(f"  > Fold {fold+1}/5 training (Full Batch)...")
             
-            # Prepare Data Loaders
-            train_loader = DataLoader(
-                TensorDataset(torch.LongTensor(X[train_idx]), torch.FloatTensor(y[train_idx])), 
-                batch_size=batch_size, shuffle=True
-            )
-            val_loader = DataLoader(
-                TensorDataset(torch.LongTensor(X[val_idx]), torch.FloatTensor(y[val_idx])), 
-                batch_size=batch_size
-            )
+            # Prepare Full-Batch Tensors
+            X_train = torch.LongTensor(X[train_idx]).to(self.device)
+            y_train = torch.FloatTensor(y[train_idx]).to(self.device)
+            X_val = torch.LongTensor(X[val_idx]).to(self.device)
+            y_val = torch.FloatTensor(y[val_idx]).to(self.device)
 
             model = model_factory().to(self.device)
             
-            # Optimizer and Scheduler configuration from v82 Final Colab
-            # High weight decay is essential to penalize Euclidean collisions 
-            # while the manifold routing holds structural integrity.
+            # AdamW + CosineAnnealingLR as per Colab v82
             optimizer = optim.AdamW(model.parameters(), lr=0.001, weight_decay=1e-1)
             scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
-            
             criterion = GraphFocalLoss(alpha=1.5, gamma=4.0)
             
             for epoch in range(epochs):
                 model.train()
-                for inputs, targets in train_loader:
-                    inputs, targets = inputs.to(self.device), targets.to(self.device)
-                    optimizer.zero_grad()
-                    
-                    # model expects (herb_indices, formula_indices)
-                    # dataset columns: 0 = Formula, 1 = Herb
-                    logits = model(inputs[:, 1], inputs[:, 0]) 
-                    
-                    loss = criterion(logits, targets)
-                    loss.backward()
-                    optimizer.step()
+                optimizer.zero_grad()
                 
-                # Step the scheduler at the end of each epoch to follow the cosine curve
+                # model(herb_indices, formula_indices)
+                # X_train[:, 1] is Herb, X_train[:, 0] is Formula
+                logits = model(X_train[:, 1], X_train[:, 0]) 
+                
+                loss = criterion(logits, y_train)
+                loss.backward()
+                optimizer.step()
                 scheduler.step()
 
-            # Final evaluation for the fold
+            # Evaluation
             model.eval()
-            all_preds, all_targets = [], []
             with torch.no_grad():
-                for inputs, targets in val_loader:
-                    inputs = inputs.to(self.device)
-                    # model expects (herb_indices, formula_indices)
-                    logits = model(inputs[:, 1], inputs[:, 0]) 
-                    probs = torch.sigmoid(logits).cpu().numpy()
-                    all_preds.extend(probs)
-                    all_targets.extend(targets.numpy())
+                val_logits = model(X_val[:, 1], X_val[:, 0])
+                val_probs = torch.sigmoid(val_logits).cpu().numpy()
+                val_targets = y_val.cpu().numpy()
 
-            preds_binary = (np.array(all_preds) > 0.5).astype(int)
+            preds_binary = (val_probs > 0.5).astype(int)
             metrics = {
-                'acc': accuracy_score(all_targets, preds_binary),
-                'f1': f1_score(all_targets, preds_binary, zero_division=0),
-                'auc': roc_auc_score(all_targets, all_preds) if len(np.unique(all_targets)) > 1 else 0.5
+                'acc': accuracy_score(val_targets, preds_binary),
+                'f1': f1_score(val_targets, preds_binary, zero_division=0),
+                'auc': roc_auc_score(val_targets, val_probs) if len(np.unique(val_targets)) > 1 else 0.5
             }
             fold_metrics.append(metrics)
             print(f"    Fold {fold+1} Results: Acc: {metrics['acc']:.4f}, F1: {metrics['f1']:.4f}, AUC: {metrics['auc']:.4f}")
 
-        # Aggregate metrics across all folds
+        # Aggregate Metrics
         avg_metrics = {k: np.mean([f[k] for f in fold_metrics]) for k in ['acc', 'f1', 'auc']}
         std_acc = np.std([f['acc'] for f in fold_metrics])
         
@@ -104,4 +94,4 @@ class ModelEvaluator:
         print(f"  - Avg ROC-AUC:  {avg_metrics['auc']:.4f}")
         print(f"  - Total Execution: {total_time:.2f} mins")
 
-        return avg_metrics, std_acc, fold_metrics, all_preds, f"{name.replace(' ', '_')}_results.pth"
+        return avg_metrics, std_acc, fold_metrics, val_probs, f"{name.replace(' ', '_')}_results.pth"
