@@ -19,8 +19,8 @@ class TestHyperSynergyArchitecture(unittest.TestCase):
 
     def setUp(self):
         """Set up dummy parameters for testing."""
-        self.num_nodes = 50
-        self.num_hyperedges = 10
+        self.num_nodes = 714
+        self.num_hyperedges = 29
         self.feat_dim = 22
         self.embed_dim = 12
         
