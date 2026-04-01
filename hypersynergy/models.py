@@ -27,12 +27,13 @@ class RiemannianResidualGating(nn.Module):
         Calculates the gated synergy score based on hyperbolic separation.
         """
         # 1. Poincaré Distance Calculation d_P(u, e)
-        # Numerical scaling to 0.90 for boundary stability in the Poincare Ball
-        u_norm = F.normalize(u, p=2, dim=-1) * 0.90
-        e_norm = F.normalize(e, p=2, dim=-1) * 0.90
+        # Increased scale to 0.95 to utilize exponential manifold volume near the boundary
+        u_norm = F.normalize(u, p=2, dim=-1) * 0.95
+        e_norm = F.normalize(e, p=2, dim=-1) * 0.95
         
         sqdist = torch.sum((u_norm - e_norm) ** 2, dim=-1)
-        denom = torch.clamp((1 - torch.sum(u_norm**2, dim=-1)) * (1 - torch.sum(e_norm**2, dim=-1)), min=1e-5)
+        # Numerical floor 1e-6 to allow deeper manifold penetration
+        denom = torch.clamp((1 - torch.sum(u_norm**2, dim=-1)) * (1 - torch.sum(e_norm**2, dim=-1)), min=1e-6)
         
         # Hyperbolic log-map distance
         dist = torch.acosh(torch.clamp(1 + 2 * torch.abs(self.curv) * sqdist / denom, min=1.0001))
@@ -46,6 +47,7 @@ class RiemannianResidualGating(nn.Module):
         manifold_gate = torch.exp(-dist / (torch.abs(self.alpha) + 1e-8))
         
         # Final Score: modulated interaction + topological residual
+        # This residual forces GCN-equivalent nodes to separate in Hyperbolic space
         return (interaction * manifold_gate) + (self.r - dist) * self.beta
 
 class MATG_Model(nn.Module):
