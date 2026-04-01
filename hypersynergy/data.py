@@ -1,125 +1,113 @@
-import os
-import ast
+import torch
 import numpy as np
-import pandas as pd
+import random
+import os
+from hypersynergy.data import DoTatLoiBenchmark
+from hypersynergy.models import MATG_Model
+from hypersynergy.evaluation import ModelEvaluator
+from hypersynergy.explainers import NeuMapperExplainer
 
-class DoTatLoiBenchmark:
+def set_seed(seed=42):
     """
-    Standardized Dataset Loader for the DoTatLoi-714 Benchmark.
-    Updated to match the exact v82_Final_MATG Colab logic for reproducibility.
+    Sets the seed for all relevant libraries to ensure reproducibility across 
+    CPU and GPU environments.
+    """
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+    
+    # Force deterministic behavior in CuDNN to prevent floating-point variance
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+    
+    # Set a fixed value for the Python hash seed
+    os.environ['PYTHONHASHSEED'] = str(seed)
+    
+    print(f"[Reproducibility] Global seed set to: {seed}")
+
+def run_hypersynergy_pipeline():
+    """
+    Main execution script for the HyperSynergy Framework.
+    1. Sets global seed for perfect reproducibility.
+    2. Loads the DoTatLoi-714 Benchmark.
+    3. Trains the Proposed MATG Model using 5-Fold Cross-Validation.
+    4. Runs an Ablation Baseline (GCN) for comparison.
+    5. Generates NeuMapper TDA Visualizations.
     """
     
-    @staticmethod
-    def load_and_build_graph(k_negative=5):
-        print(f"\n[Framework Module] Loading DoTatLoi-714 Benchmark Data...")
-        
-        # 1. Loading with Path Flexibility (Checks local dir then data/ dir)
-        try:
-            if os.path.exists("CongThuc_updated.csv"):
-                edges_df = pd.read_csv("CongThuc_updated.csv")
-                registry_df = pd.read_csv("ViThuoc_final.csv")
-                vtm_df = pd.read_csv("DoTatLoi_714_Enriched.csv")
-                tcm_df = pd.read_csv("Harmonized_Global_Herbal_Dataset.csv")
-            else:
-                edges_df = pd.read_csv("data/CongThuc_updated.csv")
-                registry_df = pd.read_csv("data/ViThuoc_final.csv")
-                vtm_df = pd.read_csv("data/DoTatLoi_714_Enriched.csv")
-                tcm_df = pd.read_csv("data/Harmonized_Global_Herbal_Dataset.csv")
-        except FileNotFoundError:
-            # Fallback only if files are completely missing
-            print("    [Warning] Local CSVs not found. Using mock benchmark logic...")
-            num_h, num_f = 714, 150
-            registry_df = pd.DataFrame({'ID_ViThuoc': [f"H{i}" for i in range(num_h)], 'TenVietNam': [f"Herb_{i}" for i in range(num_h)]})
-            edges_df = pd.DataFrame({'ID_BaiThuoc': np.random.choice([f"F{i}" for i in range(num_f)], 2000),
-                                     'ID_ViThuoc': np.random.choice([f"H{i}" for i in range(num_h)], 2000)})
-            vtm_df = pd.DataFrame({'ID_ViThuoc': [f"H{i}" for i in range(num_h)], 'Semantic_Feature_Vector': [str(list(np.random.randn(22))) for _ in range(num_h)]})
-            tcm_df = pd.DataFrame(np.random.randn(num_h, 24))
-            tcm_df.insert(0, 'ID', range(num_h))
-            tcm_df.insert(1, 'Name', [f"TCM_{i}" for i in range(num_h)])
+    # Step 0: Set seed before any data loading or model initialization
+    set_seed(42)
+    
+    # --- Step 1: Data Preparation ---
+    (dataset, vtm_feats, tcm_feats, form_feats, 
+     num_form, num_herbs, k_neg, inverse_herb_map, 
+     registry_df, tcm_df, mapped_formulas, mapped_herbs) = DoTatLoiBenchmark.load_and_build_graph()
 
-        formula_col = 'ID_BaiThuoc' if 'ID_BaiThuoc' in edges_df.columns else edges_df.columns[0]
-        herb_col = 'ID_ViThuoc' if 'ID_ViThuoc' in edges_df.columns else edges_df.columns[1]
+    # --- Step 2: Initialize Evaluator ---
+    evaluator = ModelEvaluator()
 
-        # 2. Identity Mapping
-        id_to_name = dict(zip(registry_df['ID_ViThuoc'], registry_df['TenVietNam']))
-        unique_herbs = registry_df['ID_ViThuoc'].unique()
-        num_herbs = len(unique_herbs)
-        
-        herb_map = {val: i for i, val in enumerate(unique_herbs)}
-        inverse_herb_map = {v: id_to_name.get(k, k) for k, v in herb_map.items()}
+    # --- Step 3: Train Proposed MATG Model ---
+    def matg_factory():
+        return MATG_Model(
+            num_nodes=num_herbs,
+            num_hyperedges=num_form,
+            vtm_feats=vtm_feats,
+            tcm_feats=tcm_feats,
+            formula_feats=form_feats,
+            mode='proposed',
+            embed_dim=12
+        )
 
-        edges_df = edges_df[edges_df[herb_col].isin(herb_map.keys())]
-        unique_formulas = edges_df[formula_col].unique()
-        num_formulas = len(unique_formulas)
-        formula_map = {val: i for i, val in enumerate(unique_formulas)}
+    matg_results, matg_std, _, _, _ = evaluator.execute_model_training(
+        model_factory=matg_factory,
+        name="Proposed_MATG",
+        dataset=dataset,
+        epochs=400,
+        batch_size=256
+    )
 
-        mapped_formulas = edges_df[formula_col].map(formula_map).values
-        mapped_herbs = edges_df[herb_col].map(herb_map).values
+    # --- Step 4: Train Baseline (GCN) for Comparison ---
+    def gcn_factory():
+        return MATG_Model(
+            num_nodes=num_herbs,
+            num_hyperedges=num_form,
+            vtm_feats=vtm_feats,
+            tcm_feats=tcm_feats,
+            formula_feats=form_feats,
+            mode='gcn',
+            embed_dim=12
+        )
 
-        # 3. Feature Alignment (Enhanced for Robustness)
-        feature_dim = 22
-        vtm_features = np.zeros((num_herbs, feature_dim))
-        tcm_features = np.zeros((num_herbs, feature_dim))
+    gcn_results, gcn_std, _, _, _ = evaluator.execute_model_training(
+        model_factory=gcn_factory,
+        name="GCN_Baseline",
+        dataset=dataset,
+        epochs=400,
+        batch_size=256
+    )
 
-        # Align VTM Features
-        vtm_count = 0
-        for _, row in vtm_df.iterrows():
-            if row['ID_ViThuoc'] in herb_map:
-                idx = herb_map[row['ID_ViThuoc']]
-                try: 
-                    vtm_features[idx] = np.array(ast.literal_eval(row['Semantic_Feature_Vector']))
-                    vtm_count += 1
-                except: pass
-        
-        # Align TCM Global Features (ID-based matching for accuracy)
-        tcm_count = 0
-        # If 'ID' column exists, use it. Otherwise, fallback to row index as per colab.
-        if 'ID' in tcm_df.columns:
-            tcm_lookup = dict(zip(tcm_df['ID'], tcm_df.index))
-            for h_id, idx in herb_map.items():
-                if h_id in tcm_lookup:
-                    row_idx = tcm_lookup[h_id]
-                    try:
-                        tcm_features[idx] = tcm_df.iloc[row_idx, 2:24].values.astype(float)
-                        tcm_count += 1
-                    except:
-                        tcm_features[idx] = np.random.randn(22)
-        else:
-            # Revert to raw Colab index logic
-            for idx, row in tcm_df.iterrows():
-                if idx < num_herbs:
-                    try: 
-                        tcm_features[idx] = row.iloc[2:24].values.astype(float)
-                        tcm_count += 1
-                    except: 
-                        tcm_features[idx] = np.random.randn(22)
-        
-        print(f"    [Success] Mapped {vtm_count} VTM and {tcm_count} TCM feature vectors.")
+    # --- Step 5: Explainability (NeuMapper TDA) ---
+    print("\n[XAI] Generating Topological Data Analysis (TDA) Map...")
+    explainer = NeuMapperExplainer(resolution=20, overlap=0.3)
+    explainer.generate_topology(
+        vtm_features=vtm_feats,
+        mapped_formulas=mapped_formulas,
+        mapped_herbs=mapped_herbs,
+        save_path='fig7_neumapper_topology.png'
+    )
 
-        # 4. Construct Formula Features
-        formula_features = np.zeros((num_formulas, feature_dim))
-        for f_idx in range(num_formulas):
-            f_herbs = mapped_herbs[mapped_formulas == f_idx]
-            if len(f_herbs) > 0:
-                formula_features[f_idx] = np.mean(vtm_features[f_herbs], axis=0)
+    # --- Step 6: Final Summary Comparison ---
+    print("\n" + "="*40)
+    print("HYPERSYNERGY BENCHMARK SUMMARY")
+    print("="*40)
+    print(f"{'Model':<15} | {'Accuracy':<12} | {'F1-Score':<10}")
+    print("-" * 40)
+    print(f"{'Proposed MATG':<15} | {matg_results['acc']:.4f} ± {matg_std:.4f} | {matg_results['f1']:.4f}")
+    print(f"{'GCN Baseline':<15} | {gcn_results['acc']:.4f} ± {gcn_std:.4f} | {gcn_results['f1']:.4f}")
+    print("="*40)
+    print("Results and Figure 7 saved to local directory.")
 
-        # 5. Dataset Construction with Negative Sampling (Colab While Loop)
-        num_pos = len(mapped_formulas)
-        positive_samples = np.column_stack((mapped_formulas, mapped_herbs, np.ones(num_pos)))
-        positive_set = set(zip(mapped_formulas, mapped_herbs))
-
-        negative_samples = []
-        num_neg = num_pos * k_negative
-        
-        while len(negative_samples) < num_neg:
-            f_rand, h_rand = np.random.randint(0, num_formulas), np.random.randint(0, num_herbs)
-            if (f_rand, h_rand) not in positive_set:
-                negative_samples.append([f_rand, h_rand, 0])
-                positive_set.add((f_rand, h_rand))
-
-        dataset = np.vstack((positive_samples, np.array(negative_samples)))
-        np.random.shuffle(dataset)
-
-        return (dataset, vtm_features, tcm_features, formula_features, 
-                num_formulas, num_herbs, k_negative, inverse_herb_map, 
-                registry_df, tcm_df, mapped_formulas, mapped_herbs)
+if __name__ == "__main__":
+    run_hypersynergy_pipeline()
