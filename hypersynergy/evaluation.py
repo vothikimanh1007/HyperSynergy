@@ -77,7 +77,7 @@ class ModelEvaluator:
             with torch.no_grad():
                 for inputs, targets in val_data:
                     inputs = inputs.to(self.device)
-                    logits = model(inputs[:, 0], inputs[:, 1])
+                    logits = model(inputs[:, 1], inputs[:, 0])
                     probs = torch.sigmoid(logits).cpu().numpy()
                     all_preds.extend(probs)
                     all_targets.extend(targets.numpy())
