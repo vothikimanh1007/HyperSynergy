@@ -65,7 +65,7 @@ class ModelEvaluator:
                 for inputs, targets in train_data:
                     inputs, targets = inputs.to(self.device), targets.to(self.device)
                     optimizer.zero_grad()
-                    logits = model(inputs[:, 0], inputs[:, 1])
+                    logits = model(inputs[:, 1], inputs[:, 0])
                     loss = criterion(logits, targets)
                     loss.backward()
                     optimizer.step()
