@@ -93,12 +93,12 @@ class ModelEvaluator:
                         v_probs = torch.sigmoid(v_logits).cpu().numpy()
                         v_preds = (v_probs > 0.5).astype(int)
                         
+                        v_acc = accuracy_score(y_val.cpu().numpy(), v_preds)
                         v_f1 = f1_score(y_val.cpu().numpy(), v_preds, zero_division=0)
-                        v_auc = roc_auc_score(y_val.cpu().numpy(), v_probs) if len(np.unique(y_val.cpu().numpy())) > 1 else 0.5
                         
-                        # Composite Score: Combines classification (F1) and ranking (AUC)
-                        # This balances the "Identity Bottleneck" to reach peak accuracy
-                        combined_score = (v_f1 * 0.7) + (v_auc * 0.3)
+                        # To replicate 0.9051 accuracy, we must prioritize Accuracy-F1 convergence
+                        # Accuracy is 80% weight, F1 is 20% weight for checkpointing
+                        combined_score = (v_acc * 0.8) + (v_f1 * 0.2)
                         
                         if combined_score > best_val_score:
                             best_val_score = combined_score
