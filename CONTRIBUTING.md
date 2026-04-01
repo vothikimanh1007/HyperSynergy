@@ -38,7 +38,7 @@ To make the methodology "reusable" (as requested by peer reviewers), the monolit
 ### 1\. hypersynergy/models.py (The Architecture)
 
 This file contains the core Neural Network classes, specifically separating the hyperbolic routing from the standard semantic attention.
-
+```python
 import torch  
 import torch.nn as nn  
 import torch.nn.functional as F  
@@ -48,33 +48,33 @@ import torch.nn.functional as F
 <br/>class MATG_Model(nn.Module):  
 """Manifold-Aware Transformer Gating Network."""  
 \# Fuses the local Euclidean features with the Riemannian topological priors
-
+```
 ### 2\. hypersynergy/losses.py (The Optimization)
 
 This isolates the custom loss function, highlighting the specific mathematical solution for the 1:5 data sparsity problem.
-
+```python
 import torch  
 import torch.nn as nn  
 import torch.nn.functional as F  
 <br/>class GraphFocalLoss(nn.Module):  
 """Calibrated loss to handle 1:5 class imbalance in synergy prediction."""  
 \# Prevents majority negative samples from washing out the gradient
-
+```
 ### 3\. hypersynergy/\__init_\_.py (The API Exposure)
 
 This file is crucial. It defines the public-facing API when someone types from hypersynergy import ....
-
+```python
 from .models import MATG_Model  
 from .losses import GraphFocalLoss  
 from .data import DoTatLoiBenchmark  
 from .explainers import NeuMapperExplainer  
 from .evaluation import ModelEvaluator  
 <br/>\_\_version\_\_ = "1.0.0"
-
+```
 ## Step 3: Packaging the Library (setup.py)
 
 To allow researchers to install the code easily across different environments (e.g., pip install -e .), the setup.py configuration dynamically manages dependencies:
-
+```python
 from setuptools import setup, find_packages  
 <br/>setup(  
 name="hypersynergy",  
@@ -95,11 +95,11 @@ install_requires=\[
 \],  
 python_requires=">=3.8",  
 )
-
+```
 ## Step 4: How to Contribute
 
 We welcome pull requests from the community. If you are extending the framework (for instance, applying it to new molecular synergy datasets or adding new TDA filters), please follow this workflow:
-
+```bash
 - **Fork** the repository on GitHub.
 - **Clone** your fork locally.
 - Create a new **branch** for your feature:  
@@ -112,7 +112,7 @@ We welcome pull requests from the community. If you are extending the framework 
    git push origin feature/your-new-feature
 
 - Open a **Pull Request** to the main branch of this repository.
-
+```
 ### Bug Reports
 
 If you encounter bugs, please open an **Issue** on GitHub. Tag it with bug and include a minimum reproducible example along with your stack trace.
