@@ -1,1 +1,94 @@
-
+﻿ID_BaiThuoc,ID_ViThuoc,TenViThuoc,LieuLuong,Ghi_chu_che_bien
+101,1,Ích mẫu,70%,
+101,473,Xuyên khung,2%,
+101,17,Đương quy,10%,
+101,23,Bạch thược,3%,
+101,737,Thục địa,1%,
+101,738,Bắc mộc hương,1%,
+101,630,Đại táo,2%,
+101,276,Trần bì,1%,
+101,2,Hương phụ,5%,tứ chế
+101,315,Ô dược,2%,
+102,2,Hương phụ,1g,
+102,3,Ngải cứu,1g,
+102,1,Ích mẫu,1g,
+102,4,Lá bạch đồng nữ,1g,
+103,3,Lá ngải cứu,16g,khô
+103,469,Tía tô,16g,
+104,4,Rễ bạch đồng nữ,10g,Sắc với 400ml nước còn 200ml
+105,5,Cây diếp cá,20g,khô
+105,735,Táo đỏ,10 quả,
+106,9,Bán hạ,8g,
+106,153,Phục linh,6g,
+106,733,Sinh khương,3g,
+107,9,Bán hạ,40g,chế
+107,733,Sinh khương,20g,
+108,10,Vỏ rễ cây bông,3g,
+109,11,Hạt bông,5g,sao vàng
+109,728,Cam thảo,2g,
+110,13,Tô mộc,10g,
+110,28,Huyền hồ sách,6g,
+110,258,Sơn tra,10g,
+110,6,Hồng hoa,3g,
+110,681,Ngũ linh chi,8g,
+110,17,Đương quy thân,10g,
+111,13,Tô mộc,12g,
+112,17,Đương quy,12g,
+112,737,Thục địa,12g,
+112,23,Bạch thược,8g,
+112,473,Xuyên khung,6g,
+113,17,Đương quy,7g,
+113,731,Quế chi,6g,
+113,733,Sinh khương,6g,
+113,630,Đại táo,6g,
+113,23,Thược dược,10g,
+113,,Đường phèn,50g,
+114,21,Đại kế (Ô rô),20g,
+114,729,Bồ hoàng,8g,
+114,735,Táo đen,10 quả,
+115,23,Bạch thược,8g,
+115,728,Cam thảo,4g,
+116,731,Quế chi,6g,
+116,23,Bạch thược,6g,
+116,630,Đại táo,6g,
+116,733,Sinh khương,6g,
+116,153,Phục linh,6g,
+116,280,Bạch truật,6g,
+116,728,Cam thảo,4g,
+117,24,Xích thược,6-8g,Tán nhỏ
+118,24,Xích thược,(bằng nhau),Tán nhỏ
+118,2,Hương phụ,(bằng nhau),Tán nhỏ
+119,28,Duyên hồ sách,4.0g,
+119,17,Đương quy,3.0g,
+119,731,Quế chỉ,3.0g,
+119,730,Can khương,2.5g,
+120,29,Bồ công anh Việt Nam,20-40g,"Tươi, giã nát, thêm ít muối"
+121,29,Bồ công anh Việt Nam,20g,Khô
+121,739,Lá khôi,15g,
+121,114,Lá khổ sâm,10g,
+122,32,Kim ngân,6g (hoa) hoặc 12g (lá),
+122,,Đường,Vừa đủ ngọt (khoảng 4g),
+123,732,Kim ngân hoa,40g,Tán bột
+123,54,Liên kiều,40g,Tán bột
+123,740,Kinh giới tuệ,16g,Tán bột
+123,520,Cát cánh,24g,Tán bột
+123,736,Đạm đậu sị,20g,Tán bột
+123,441,Bạc hà,24g,Tán bột
+123,457,Ngưu bàng tử,24g,Tán bột
+123,447,Đạm trúc diệp,16g,Tán bột
+124,38,Con Rết,(Không rõ lượng),"Ngô công, bồ hoàng, chấn, sấy khô, tán nhỏ, hòa ít long não, thêm ít nước hay rượu bôi lên."
+125,38,Con Rết,4-6 con,"Sấy khô, bỏ đầu chân, tán nhỏ, trộn với lượng tương đương bột cam thảo và thêm nước hồ làm thành viên."
+126,37,Mã tiên thảo,(Không rõ lượng),"Tươi giã lấy nước uống, bã đắp lên mụn nhọt."
+127,47,Cào bản,6g,
+127,473,Xuyên khung,3g,
+127,482,Phòng phong,5g,
+127,442,Bạch chỉ,3g,
+127,425,Tế tân,2g,
+127,728,Cam thảo,3g,
+128,54,Liên kiều,6g,
+128,732,Kim ngân hoa,4g,
+128,741,Gai bồ kết,3g,
+129,54,Liên kiều,8g,
+129,34,Hạ khô thảo,6g,
+129,735,Táo,5g,
+129,728,Cam thảo,3g,
