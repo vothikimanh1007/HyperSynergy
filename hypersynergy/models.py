@@ -8,18 +8,19 @@ class RiemannianResidualGating(nn.Module):
     Implemented as Equation (2) in the manuscript.
     
     This engine resolves 'Dimensional Congestion' by gating semantic 
-    hits with exact Poincaré manifold distances.
+    hits with exact Poincaré manifold distances. Restored to v82_Final 
+    numerical constants for replication accuracy.
     """
     def __init__(self, embed_dim, curvature=1.5, alpha=0.7, beta=0.15):
         super(RiemannianResidualGating, self).__init__()
-        # Manifold Hyperparameters (v82_Final verified)
+        # Manifold Hyperparameters (Strict v82_Final Configuration)
         self.r = nn.Parameter(torch.tensor(5.0))         
         self.bilinear = nn.Bilinear(embed_dim, embed_dim, 1)
         self.curv = nn.Parameter(torch.tensor([curvature])) 
-        self.alpha = nn.Parameter(torch.tensor([alpha]))   
-        self.beta = beta # Residual scaling from v82 Colab
+        self.manifold_alpha = nn.Parameter(torch.tensor([alpha]))   
+        self.beta = beta 
         
-        # v82 Critical: Orthogonal init is required for hyperbolic stability
+        # Orthogonal init ensures manifold stability during early epochs
         nn.init.orthogonal_(self.bilinear.weight)
 
     def forward(self, u, e):
@@ -27,27 +28,26 @@ class RiemannianResidualGating(nn.Module):
         Calculates the gated synergy score based on hyperbolic separation.
         """
         # 1. Poincaré Distance Calculation d_P(u, e)
-        # Increased scale to 0.95 to utilize exponential manifold volume near the boundary
-        u_norm = F.normalize(u, p=2, dim=-1) * 0.95
-        e_norm = F.normalize(e, p=2, dim=-1) * 0.95
+        # Scaled to 0.90 to balance manifold volume vs. gradient stability
+        u_norm = F.normalize(u, p=2, dim=-1) * 0.90
+        e_norm = F.normalize(e, p=2, dim=-1) * 0.90
         
         sqdist = torch.sum((u_norm - e_norm) ** 2, dim=-1)
-        # Numerical floor 1e-6 to allow deeper manifold penetration
-        denom = torch.clamp((1 - torch.sum(u_norm**2, dim=-1)) * (1 - torch.sum(e_norm**2, dim=-1)), min=1e-6)
+        # 1e-5 clamp prevents acosh gradients from exploding near the boundary
+        denom = torch.clamp((1 - torch.sum(u_norm**2, dim=-1)) * (1 - torch.sum(e_norm**2, dim=-1)), min=1e-5)
         
-        # Hyperbolic log-map distance
+        # dist is the manifold separation metric
         dist = torch.acosh(torch.clamp(1 + 2 * torch.abs(self.curv) * sqdist / denom, min=1.0001))
         
-        # 2. Semantic Interaction (Standard Bilinear Matching)
+        # 2. Semantic Interaction (Cross-Attention proxy)
         interaction = self.bilinear(u, e).squeeze(-1)
         
-        # 3. Decision Gating (The v82 "Shattering" logic)
-        # manifold_gate scales how much the model trusts the semantic match 
-        # based on the hierarchical position in the manifold.
-        manifold_gate = torch.exp(-dist / (torch.abs(self.alpha) + 1e-8))
+        # 3. Decision Gating (v82 Breakthrough logic)
+        # Manifold gate natively 'shatters' Euclidean collisions by filtering
+        # non-hierarchical herb combinations.
+        manifold_gate = torch.exp(-dist / (torch.abs(self.manifold_alpha) + 1e-8))
         
-        # Final Score: modulated interaction + topological residual
-        # This residual forces GCN-equivalent nodes to separate in Hyperbolic space
+        # Final Score: Scaled interaction + distance-aware residual
         return (interaction * manifold_gate) + (self.r - dist) * self.beta
 
 class MATG_Model(nn.Module):
@@ -63,7 +63,6 @@ class MATG_Model(nn.Module):
         self.mode = mode
         
         # --- PHASE A: PMEA Semantic Projection ---
-        # Shared projection forces cross-ontology manifold alignment
         self.proj = nn.Sequential(
             nn.Linear(vtm_feats.shape[1], embed_dim), 
             nn.LayerNorm(embed_dim), 
@@ -71,7 +70,6 @@ class MATG_Model(nn.Module):
         )
         nn.init.orthogonal_(self.proj[0].weight)
         
-        # Buffers for raw semantic features
         self.register_buffer('vtm_raw', torch.FloatTensor(vtm_feats))
         self.register_buffer('tcm_raw', torch.FloatTensor(tcm_feats))
         self.register_buffer('form_raw', torch.FloatTensor(formula_feats))
@@ -98,13 +96,9 @@ class MATG_Model(nn.Module):
         if mode == 'proposed':
             self.decoder = RiemannianResidualGating(embed_dim)
         else:
-            # Euclidean baseline fallback (GCN/GAT)
             self.decoder = nn.Bilinear(embed_dim, embed_dim, 1)
 
     def forward(self, node_indices, hyperedge_indices, return_attn=False):
-        """
-        Forward pass implementing the v82_Final fusion logic.
-        """
         # 1. Semantic Flow (PMEA Alignment)
         v_vtm = self.proj(self.vtm_raw[node_indices])
         v_tcm = self.proj(self.tcm_raw[node_indices])
@@ -115,19 +109,18 @@ class MATG_Model(nn.Module):
         
         # 3. Feature-Level Attention Gating
         if self.mode in ['proposed', 'gat']:
-            # Learns to balance clinical semantic vectors vs. graph identity
             alpha_gate = torch.sigmoid(self.attn_gate(torch.cat([h_top, h_sem], dim=-1)))
             h_fused = self.dropout(alpha_gate * h_top + (1 - alpha_gate) * h_sem)
         else:
             alpha_gate = None
             h_fused = self.dropout(h_top + h_sem)
             
-        # Formula-side hyperedge embedding
+        # Formula Side
         f_sem = self.proj(self.form_raw[hyperedge_indices])
         f_top = self.hyperedge_emb(hyperedge_indices)
         f_final = self.dropout(f_sem + f_top)
         
-        # 4. Final Synergy Scoring
+        # 4. Decoding
         if self.mode == 'proposed':
             logits = self.decoder(h_fused, f_final)
         else:
