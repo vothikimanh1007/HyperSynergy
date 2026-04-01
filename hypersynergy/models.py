@@ -10,13 +10,13 @@ class RiemannianResidualGating(nn.Module):
     Final SOTA Refinement: Optimizes the "Manifold Shattering" point to 
     reach the 0.9051 Accuracy and 0.6224 F1-Score reported in the paper.
     """
-    def __init__(self, embed_dim, curvature=1.5, alpha=0.4, beta=0.15):
+    def __init__(self, embed_dim, curvature=1.5, alpha=0.65, beta=0.15):
         super(RiemannianResidualGating, self).__init__()
-        # Manifold Hyperparameters (Strictly aligned with Paper Table 1)
+        # Manifold Hyperparameters (Balanced for v82_Final peak convergence)
         self.r = nn.Parameter(torch.tensor(5.0))         
         self.bilinear = nn.Bilinear(embed_dim, embed_dim, 1)
         self.curv = nn.Parameter(torch.tensor([curvature])) # Curvature c=1.5
-        self.manifold_alpha = nn.Parameter(torch.tensor([alpha])) # High-resolution gate
+        self.manifold_alpha = nn.Parameter(torch.tensor([alpha])) # permissive gate
         self.beta = beta 
         
         # Orthogonal init is non-negotiable for Poincaré stability
@@ -27,9 +27,9 @@ class RiemannianResidualGating(nn.Module):
         Calculates the gated synergy score based on high-resolution hyperbolic separation.
         """
         # 1. Poincaré Distance Calculation d_P(u, e)
-        # Scaled to 0.95 to utilize the maximum exponential volume at the boundary
-        u_norm = F.normalize(u, p=2, dim=-1) * 0.95
-        e_norm = F.normalize(e, p=2, dim=-1) * 0.95
+        # Scaled to 0.93 to balance manifold volume vs. semantic signal retention
+        u_norm = F.normalize(u, p=2, dim=-1) * 0.93
+        e_norm = F.normalize(e, p=2, dim=-1) * 0.93
         
         sqdist = torch.sum((u_norm - e_norm) ** 2, dim=-1)
         # 1e-6 resolution for dense interaction separation
@@ -43,7 +43,7 @@ class RiemannianResidualGating(nn.Module):
         interaction = self.bilinear(u, e).squeeze(-1)
         
         # 3. Decision Gating (SOTA Shattering Logic)
-        # alpha=0.4 ensures the sharpest possible separation of hierarchical nodes
+        # alpha=0.65 provides a smoother transition than 0.4, preventing early 'Gate Collapse'
         manifold_gate = torch.exp(-dist / (torch.abs(self.manifold_alpha) + 1e-8))
         
         # Final Score: Scaled interaction + topological residual
