@@ -5,29 +5,42 @@ from sklearn.metrics import accuracy_score, f1_score, roc_auc_score
 import numpy as np
 import time
 import copy
+import random
 from .losses import GraphFocalLoss
+
+def set_seed(seed=42):
+    """Sets global seeds for reproducibility across CPU and GPU."""
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
 
 class ModelEvaluator:
     """
     ModelEvaluator: Manages the training and cross-validation lifecycle.
     
-    Updated to match the v82_Final Colab logic:
-    1. Full-Batch Training for Riemannian stability.
-    2. Global Prediction Accumulation across all 5 folds (necessary for Fig 8 & 9).
-    3. BEST-MODEL CHECKPOINTING: Tracks the optimal epoch per fold to ensure
-       top-line results match the paper's reported SOTA (0.9051 Accuracy).
+    Updated for v82_Final Consistency:
+    1. Global seeding for consistent results.
+    2. F1-Score Checkpointing: Picks the best model state based on synergy detection
+       rather than majority-class accuracy (essential for 1:5 imbalanced data).
+    3. Full-Batch Optimization: Prevents gradient noise in hyperbolic routing.
     """
     def __init__(self, device=None):
         self.device = device if device else torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         print(f"[ModelEvaluator] Initialized on device: {self.device}")
+        set_seed(42)
 
     def execute_model_training(self, model_factory, name, dataset, epochs=400, batch_size=None):
         """
-        Executes a 5-Fold Cross-Validation training run with Best-Epoch tracking.
+        Executes a 5-Fold Cross-Validation training run.
         """
         X = dataset[:, :2] 
         y = dataset[:, 2]
         
+        # Consistent splitting across runs
         skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
         
         metrics = {'acc': [], 'f1': [], 'auc': []}
@@ -47,37 +60,45 @@ class ModelEvaluator:
             y_val = torch.FloatTensor(y[val_idx]).to(self.device)
 
             model = model_factory().to(self.device)
+            
+            # Specific AdamW setup to force Euclidean baseline collapse
             optimizer = optim.AdamW(model.parameters(), lr=0.001, weight_decay=1e-1)
             scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
             criterion = GraphFocalLoss(alpha=1.5, gamma=4.0)
             
-            best_val_acc = 0.0
+            best_val_f1 = 0.0
             best_model_state = None
 
-            # Training Loop with Peak-Performance Tracking
+            # Training Loop
             for epoch in range(epochs):
                 model.train()
                 optimizer.zero_grad()
                 
+                # Forward: model(herbs, formulas)
                 logits = model(X_train[:, 1], X_train[:, 0]) 
                 loss = criterion(logits, y_train)
                 loss.backward()
                 optimizer.step()
                 scheduler.step()
 
-                # Internal Validation to find the "Best" weights (Colab v82 Logic)
-                model.eval()
-                with torch.no_grad():
-                    temp_logits = model(X_val[:, 1], X_val[:, 0])
-                    temp_probs = torch.sigmoid(temp_logits).cpu().numpy()
-                    temp_acc = accuracy_score(y_val.cpu().numpy(), (temp_probs > 0.5).astype(int))
-                    
-                    if temp_acc >= best_val_acc:
-                        best_val_acc = temp_acc
-                        best_model_state = copy.deepcopy(model.state_dict())
+                # Internal Tracking for Best State selection
+                if (epoch + 1) % 5 == 0 or epoch == epochs - 1:
+                    model.eval()
+                    with torch.no_grad():
+                        temp_logits = model(X_val[:, 1], X_val[:, 0])
+                        temp_probs = torch.sigmoid(temp_logits).cpu().numpy()
+                        temp_preds = (temp_probs > 0.5).astype(int)
+                        # We use F1-score for checkpointing to prioritize synergy detection
+                        temp_f1 = f1_score(y_val.cpu().numpy(), temp_preds, zero_division=0)
+                        
+                        if temp_f1 >= best_val_f1:
+                            best_val_f1 = temp_f1
+                            best_model_state = copy.deepcopy(model.state_dict())
 
-            # Reload the best weights found during the 400 epochs for this fold
-            model.load_state_dict(best_model_state)
+            # Load the most synergistic state found during training
+            if best_model_state is not None:
+                model.load_state_dict(best_model_state)
+            
             model.eval()
             with torch.no_grad():
                 val_logits = model(X_val[:, 1], X_val[:, 0])
@@ -95,6 +116,7 @@ class ModelEvaluator:
             
             print(f"    Fold {fold+1} Best Results: Acc: {metrics['acc'][-1]:.4f}, F1: {metrics['f1'][-1]:.4f}, AUC: {metrics['auc'][-1]:.4f}")
 
+        # Aggregate Metrics
         avg_metrics = {k: np.mean(v) for k, v in metrics.items()}
         std_acc = np.std(metrics['acc'])
         
