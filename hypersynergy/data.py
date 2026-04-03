@@ -2,7 +2,7 @@ import torch
 import numpy as np
 import random
 import os
-from hypersynergy.data import DoTatLoiBenchmark
+from hypersynergy.data_loader import DoTatLoiBenchmark
 from hypersynergy.models import MATG_Model
 from hypersynergy.evaluation import ModelEvaluator
 from hypersynergy.explainers import NeuMapperExplainer
