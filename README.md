@@ -44,7 +44,7 @@ HyperSynergy/
 ## ⚙️ Installation
 
 \# 1. Clone the repository  
-git clone [[https://github.com//vothikimanh1007/HyperSynergy.git](https://github.com/vothikimanh1007/HyperSynergy.git)] cd hypersynergy
+git clone [[...]] cd hypersynergy
 
 
 cd HyperSynergy  
@@ -81,7 +81,7 @@ python examples/generate_simulation.py --domain Pharma
 
 @article{anh2026topological,  
 title={Topological Knowledge Bridging: The DoTatLoi-714 Benchmark and a Heterogeneous Hypergraph Framework for Cross-Cultural Herbal Synergy Prediction},  
-author={Vo Thi Kim Anh and Václav Snášel},  
+author={},  
 journal={(Under Review)},  
 year={2026}  
 }
